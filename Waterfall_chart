@@ -1,0 +1,77 @@
+# The following code to create a dataframe and remove duplicated rows is always executed and acts as a preamble for your script: 
+
+# dataset = pandas.DataFrame(BU with Numbering, Amount, Year, Quarter, Month, Day, Year.1, P&L Head)
+# dataset = dataset.drop_duplicates()
+
+# Paste or type your script code here:
+import numpy as np
+import seaborn as sns
+import datetime 
+import matplotlib.pyplot as plt
+
+filtered_df_Budget=dataset[(dataset['Year']=='Bdgt.')]
+filtered_df_Actual=dataset[(dataset['Year']=='Act.')]
+
+result_df_Budget = filtered_df_Budget.groupby('P&L Head')['Amount'].sum()
+result_df_Actual = filtered_df_Actual.groupby('P&L Head')['Amount'].sum()
+
+GC_result=result_df_Actual['GC']-result_df_Budget['GC']
+result=result_df_Budget-result_df_Actual
+
+result=pandas.Series({'GC':GC_result,'HR Cost':result['HR Cost'],'Mfg Cost':result['Mfg Cost'],'Regul. & Admin.':result['Regul. & Admin.'],'Mktg. Exps.':result['Mktg. Exps.'],'S&D Exps.':result['S&D Exps.'],'R&D Cost':result['R&D Cost'],'OI, Savings\n & Corp. Allo.':result['OI, Savings & Corp. Allo.']})
+
+index= ['Ebidta\n Budget'] + result.index.tolist()
+data = {'amount': [result_df_Budget['EBIDTA After R&D']] + result.tolist()}
+
+trans = pandas.DataFrame(data=data,index=index)
+blank = trans.amount.cumsum().shift(1).fillna(0)
+
+#Get the net total number for the final element in the waterfall
+total = trans.sum().amount
+trans.loc["Ebidta\n Actual"]= total
+blank.loc["Ebidta\n Actual"] = total
+
+#The steps graphically show the levels as well as used for label placement
+step = blank.reset_index(drop=True).repeat(3).shift(-1)
+step[1::3] = np.nan
+
+blank.loc["Ebidta\n Actual"] = 0
+
+#Plot and label
+colors = ['skyblue'] + ['green' if val >= 0 else 'red' for val in trans.values[1:]]
+my_plot = trans.plot(kind='bar', stacked=True, bottom=blank, legend=None, figsize=(10, 5), title="Ebidta Budget vs Ebidta Actual")
+for i, patch in enumerate(my_plot.containers):
+    for j, bar in enumerate(patch):
+        bar.set_color(colors[j])
+my_plot.patches[-1].set_color('skyblue')
+#Get the y-axis position for the labels
+y_height = trans.amount.cumsum().shift(1).fillna(0)
+
+#Get an offset so labels don't sit right on top of the bar
+max = trans.max()
+neg_offset = max / 25
+pos_offset = max / 50
+plot_offset = int(max / 15)
+
+#Start label loop
+loop = 0
+for index, row in trans.iterrows():
+    # For the last item in the list, we don't want to double count
+    if row['amount'] == total:
+        y = y_height[loop]
+    else:
+        y = y_height[loop] + row['amount']
+    # Determine if we want a neg or pos offset
+    if row['amount'] > 0:
+        y += pos_offset
+    else:
+        y -= neg_offset
+    my_plot.annotate("{:,.2f}".format(row['amount']),(loop,y),ha="center")
+    loop+=1
+
+#Scale up the y axis so there is room for the labels
+my_plot.set_ylim(0,blank.max()+int(plot_offset))
+#Rotate the labels
+my_plot.set_xticklabels(trans.index,rotation=15)
+my_plot.plot(step.index, step.values,'k')
+plt.show()
